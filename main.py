@@ -1,81 +1,131 @@
 import tkinter as tk
 from datetime import datetime
 import requests
+from gpiozero import Button
+
+# Initialize button connected to GPIO pin 17
+button = Button(17)
+
 
 class ClockApp:
     def __init__(self):
         self.root = tk.Tk()
+        self.root.config(cursor="none")
         self.root.title("Black Clock Window")
-
-        # Make the window full screen and black background
         self.root.configure(bg="black")
-        self.root.attributes('-fullscreen', True)  # Fullscreen
-        
+        self.root.attributes('-fullscreen', True)
 
-        # Frame to hold time and weather side by side
-        self.top_frame = tk.Frame(self.root, bg="black")
-        self.top_frame.pack(fill="both", expand=True)
+        self.darkscreen = True
+        self.button_was_pressed = False
 
-        # TIME LABEL - LEFT SIDE
+
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # MAIN FRAME (optional container)
+        self.main_frame = tk.Frame(self.root, bg="black", width=screen_width, height=screen_height)
+        self.main_frame.place(x=0, y=0)
+
+        # Time Label - Top Left
         self.label = tk.Label(
-            self.top_frame,
+            self.main_frame,
             font=("Roboto", 48),
             fg="white",
             bg="black",
-            anchor="n",
-            justify="left")
-        self.label.pack(side="left", fill="both", expand=True, padx=50, pady=50)
+            anchor="nw",
+            justify="left"
+        )
+        self.label.place(x=50, y=50)
+        
+        self.todo_title = tk.Label(
+        self.main_frame,
+        text="Reminders",
+        fg="white",
+        bg="black",
+        font=("Roboto", 28, "bold"),
+        anchor="nw",
+        justify="left"
+        )
+        self.todo_title.place(x=50, y=250)
 
-        # WEATHER LABEL - RIGHT SIDE
+        # Tasks Label - Below Time
+        self.todo_label = tk.Label(
+            self.main_frame,
+            text="Fetching tasks...",
+            fg="white",
+            bg="black",
+            font=("Roboto", 24),
+            justify="left",
+            anchor="nw",
+            wraplength=screen_width // 2
+        )
+        self.todo_label.place(x=50, y=300)
+
+        # Weather Label - Top Right
         self.result_label = tk.Label(
-            self.top_frame,
+            self.main_frame,
             font=("Roboto", 48),
             fg="white",
             bg="black",
-            anchor="n",
-            justify="right")
-        self.result_label.pack(side="right", fill="both", expand=True, padx=50, pady=50)
+            anchor="ne",
+            justify="right"
+        )
+        self.result_label.place(x=screen_width - 50, y=50, anchor="ne")
 
-        # NEWS LABEL BELOW BOTH
+        # News Label - Bottom Middle
         self.news_label = tk.Label(
-            self.root,
+            self.main_frame,
             text="Fetching news...",
             fg="white",
             bg="black",
             font=("Roboto", 24),
             justify="center",
-            wraplength=self.root.winfo_screenwidth() - 50)
-        self.news_label.pack(pady=40)
-        
-        # TASK LABEL BELOW NEWS
-        self.todo_label = tk.Label(
-            self.root,
-            text="Fetching tasks...",
-            fg="white",
-            bg="black",
-            font=("Roboto", 24),
-            justify="center",
-            wraplength=self.root.winfo_screenwidth() - 100)
-        self.todo_label.pack(pady=20)
-        
+            wraplength=screen_width - 100
+        )
+        self.news_label.place(x=screen_width // 2, y=screen_height - 100, anchor="s")
 
-        self.update_todoist()  # Start task updates
 
-        self.update_news()  # Start news updates
-        
-        self.update_clock()  # Start the clock updates
-        
-        self.update_weather()  # Start the weather updates
-        
-        
-        # Allow exiting fullscreen with Escape key
+
+
+        self.update_todoist()
+        self.update_news()
+        self.update_clock()
+        self.update_weather()
+
         self.root.bind("<Escape>", lambda e: self.root.destroy())
 
+        # Begin button monitoring
+        self.check_button_press()
+
         self.root.mainloop()
-    
+
+    def check_button_press(self):
+        if button.is_pressed:
+            if not self.button_was_pressed:  # Just pressed
+                self.darkscreen = not self.darkscreen
+                self.toggle_display()
+                self.button_was_pressed = True
+        else:
+            self.button_was_pressed = False  # Reset when released
+
+        self.root.after(100, self.check_button_press)
+
+    def toggle_display(self):
+        widgets = [self.label, self.result_label, self.news_label, self.todo_label, self.todo_title]
+        if self.darkscreen:
+            for widget in widgets:
+                widget.place_forget()
+        else:
+            self.label.place(x=50, y=50)
+            self.todo_title.place(x=50, y=250)
+            self.todo_label.place(x=50, y=300)
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            self.result_label.place(x=screen_width - 50, y=50, anchor="ne")
+            self.news_label.place(x=screen_width // 2, y=screen_height - 100, anchor="s")
     
     def get_weather(self, city):
-        api_key = "Enter your api token here"  # Replace with your actual API key
+        api_key = "enter api key here"  # Replace with your actual API key
         url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=imperial"
         response = requests.get(url)
         
@@ -118,13 +168,15 @@ class ClockApp:
     
     
     def get_news(self):
-        news_api_key = "Enter your api token here"  # Replace with your actual NewsAPI key
+        news_api_key = "enter api key here"
+
         url = f"https://newsapi.org/v2/top-headlines?country=us&pageSize=3&apiKey={news_api_key}"
+
         try:
             response = requests.get(url)
             if response.status_code == 200:
                 articles = response.json()["articles"]
-                headlines = [f"{article['title']}" for article in articles if article.get("title")]
+                headlines = [article.get("title", "") for article in articles if article.get("title")]
                 return "\n\n".join(headlines[:3])
             else:
                 return "Failed to fetch news."
@@ -139,7 +191,7 @@ class ClockApp:
         
         
     def get_todoist_tasks(self):
-        api_token = "Enter your api token here"  # Replace with your actual Todoist API token
+        api_token = "enter api key here"  # Replace with your actual Todoist API token
         headers = {
             "Authorization": f"Bearer {api_token}"
         }
@@ -168,7 +220,7 @@ class ClockApp:
             tasks = tasks_response.json()
 
             if not tasks:
-                return "No uncompleted tasks in MagicMirror."
+                return "No tasks to do"
 
             return "\n".join([f"• {task['content']}" for task in tasks])
 
@@ -179,6 +231,6 @@ class ClockApp:
     def update_todoist(self):
         tasks_text = self.get_todoist_tasks()
         self.todo_label.config(text=tasks_text)
-        self.root.after(900000, self.update_todoist)  # Update every 15 minutes
+        self.root.after(60000, self.update_todoist)  # Update every minute
 
 ClockApp()
